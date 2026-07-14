@@ -26,7 +26,10 @@ mypy_path = ["src"]
 ignore_missing_imports = true
 
 # Machine-local IDAPython resolution: create a gitignored pyrightconfig.json
-# (it takes precedence over this section) adding your IDA install's python
-# directory to extraPaths.
+# adding your IDA install's python directory to extraPaths. Note that when
+# that file exists, pyright reads ONLY it and ignores this section, so it must
+# repeat typeCheckingMode. "standard" keeps basedpyright (used by Zed) from
+# emitting its stricter "recommended"-mode diagnostics.
 [tool.pyright]
+typeCheckingMode = "standard"
 extraPaths = ["src"]
