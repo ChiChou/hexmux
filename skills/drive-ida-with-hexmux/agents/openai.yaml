@@ -1,0 +1,4 @@
+interface:
+  display_name: "Drive IDA with Hexmux"
+  short_description: "Generate and run focused IDAPython scripts"
+  default_prompt: "Use $drive-ida-with-hexmux to inspect the active IDA database with a focused script."

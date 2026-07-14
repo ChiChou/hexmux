@@ -1,0 +1,32 @@
+[project]
+name = "hexmux"
+version = "0.1.0"
+description = "Unix-socket supervisor and script runner for driving IDA Pro"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+hexmux = "hexmux.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-select = ["B", "SIM", "C4", "UP", "RET", "PIE", "PERF", "RUF"]
+
+[tool.mypy]
+mypy_path = ["src"]
+ignore_missing_imports = true
+
+# Machine-local IDAPython resolution: create a gitignored pyrightconfig.json
+# (it takes precedence over this section) adding your IDA install's python
+# directory to extraPaths.
+[tool.pyright]
+extraPaths = ["src"]
