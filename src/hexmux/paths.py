@@ -13,6 +13,10 @@ def runtime_dir() -> Path:
     if sys.platform == "win32":
         return Path(os.environ["TEMP"]) / f"hexmux-{os.environ['USERNAME']}"
 
+    if sys.platform.startswith("linux"):
+        base = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+        return base / "hexmux"
+
     # /tmp is a symlink to /private/tmp on macOS; use the real path so socket
     # paths compare equal regardless of how callers resolve them.
     base = Path("/private/tmp") if sys.platform == "darwin" else Path("/tmp")

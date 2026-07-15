@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import os
 import signal
+import socket
 import stat
 import time
 from dataclasses import dataclass, field
@@ -38,8 +39,12 @@ class Supervisor:
         self.pending: dict[str, asyncio.Future] = {}
         self.request_number = 0
         self.stop_event = asyncio.Event()
+        self.active_connections = 0
+        self.activity_event = asyncio.Event()
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.active_connections += 1
+        self.activity_event.set()
         try:
             hello = await async_receive(reader)
             role = hello.get("role")
@@ -55,6 +60,8 @@ class Supervisor:
             with contextlib.suppress(Exception):
                 await async_send(writer, {"ok": False, "error": f"supervisor error: {exc}"})
         finally:
+            self.active_connections -= 1
+            self.activity_event.set()
             writer.close()
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
@@ -164,42 +171,76 @@ class Supervisor:
                 self.pending.pop(request_id, None)
 
 
-async def run() -> None:
+async def stop_when_idle(supervisor: Supervisor, timeout: float) -> None:
+    while not supervisor.stop_event.is_set():
+        if supervisor.active_connections:
+            supervisor.activity_event.clear()
+            await supervisor.activity_event.wait()
+            continue
+        supervisor.activity_event.clear()
+        try:
+            await asyncio.wait_for(supervisor.activity_event.wait(), timeout)
+        except TimeoutError:
+            if not supervisor.active_connections:
+                supervisor.stop_event.set()
+
+
+async def run(*, listen_fd: int | None = None, idle_timeout: float | None = None) -> None:
     if not hasattr(asyncio, "start_unix_server"):
         raise SystemExit("hexmux currently requires Unix-domain socket support")
-    prepare_runtime_dir()
-    path = socket_path()
-    if path.exists():
-        try:
-            _reader, writer = await asyncio.open_unix_connection(path)
-        except OSError:
-            path.unlink()
-        else:
-            writer.close()
-            await writer.wait_closed()
-            raise SystemExit(f"supervisor already running at {path}")
-
     supervisor = Supervisor()
-    server = await asyncio.start_unix_server(supervisor.handle, path=path)
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    path = None
+    if listen_fd is not None:
+        listener = socket.socket(fileno=listen_fd)
+        listener.setblocking(False)
+        server = await asyncio.start_unix_server(supervisor.handle, sock=listener)
+    else:
+        prepare_runtime_dir()
+        path = socket_path()
+        if path.exists():
+            try:
+                _reader, writer = await asyncio.open_unix_connection(path)
+            except OSError:
+                path.unlink()
+            else:
+                writer.close()
+                await writer.wait_closed()
+                raise SystemExit(f"supervisor already running at {path}")
+        server = await asyncio.start_unix_server(supervisor.handle, path=path)
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, supervisor.stop_event.set)
+    idle_task = None
     try:
         async with server:
+            idle_task = (
+                asyncio.create_task(stop_when_idle(supervisor, idle_timeout)) if idle_timeout is not None else None
+            )
             await supervisor.stop_event.wait()
     finally:
+        if idle_task is not None:
+            idle_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await idle_task
         server.close()
         await server.wait_closed()
-        with contextlib.suppress(FileNotFoundError):
-            path.unlink()
+        if path is not None:
+            with contextlib.suppress(FileNotFoundError):
+                path.unlink()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hexmux background supervisor")
-    parser.parse_args()
-    asyncio.run(run())
+    parser.add_argument("--listen-fd", type=int, default=None)
+    parser.add_argument("--idle-timeout", type=float, default=None)
+    args = parser.parse_args()
+    if args.listen_fd is not None and args.listen_fd < 0:
+        parser.error("--listen-fd must be non-negative")
+    if args.idle_timeout is not None and args.idle_timeout <= 0:
+        parser.error("--idle-timeout must be positive")
+    asyncio.run(run(listen_fd=args.listen_fd, idle_timeout=args.idle_timeout))
 
 
 if __name__ == "__main__":

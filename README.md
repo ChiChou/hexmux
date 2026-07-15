@@ -13,16 +13,47 @@ mkdir -p ~/.idapro/plugins
 cp plugin/hexmux_plugin.py ~/.idapro/plugins/
 ```
 
-Restart IDA. The plugin asks the installed `hexmux` CLI to start the supervisor, then connects in the background. If IDA's GUI environment cannot find the executable, set `HEXMUX_EXECUTABLE` to its absolute path before launching IDA.
+Restart IDA. The plugin connects to the system-owned activation socket in the
+background. It does not locate executables or spawn the supervisor itself.
 
 ## Use
 
-The plugin or the first CLI command starts the detached supervisor on demand:
+The first connection starts the supervisor through launchd or systemd:
 
 ```sh
 hexmux status
 hexmux ps
 ```
+
+## Native socket activation
+
+The C++ activator lets launchd or systemd own the Unix socket and start the
+Python supervisor only when a client connects. Install it before loading the
+IDA plugin or using the CLI:
+
+macOS:
+
+```sh
+./scripts/install-macos.sh
+```
+
+Linux with a systemd user manager:
+
+```sh
+./scripts/install-linux.sh
+```
+
+Set `HEXMUX_NO_LOAD=1` to build and generate the service definition without
+loading or enabling it.
+
+The generated launchd/systemd job invokes the same Python environment used by
+the installer. The supervisor adopts the inherited listening descriptor and
+exits after 30 idle seconds. It does not remove the service-manager-owned
+socket. Use `--no-load` to inspect the generated job without registering it.
+
+The current native implementation supports launchd and systemd. A Windows SCM
+named-pipe backend requires the corresponding Python multiplexed-stream adapter
+and is not provided yet.
 
 Generate a script:
 

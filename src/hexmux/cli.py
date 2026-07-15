@@ -3,13 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import socket
-import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
-from .paths import prepare_runtime_dir, socket_path
+from .paths import socket_path
 from .wire import receive, send
 
 
@@ -36,20 +34,10 @@ def is_running() -> bool:
 def ensure_supervisor() -> None:
     if is_running():
         return
-    prepare_runtime_dir()
-    subprocess.Popen(
-        [sys.executable, "-m", "hexmux.supervisor"],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        close_fds=True,
+    raise SystemExit(
+        f"Hexmux activation socket is unavailable at {socket_path()}; "
+        "install or load the native activation service"
     )
-    for _ in range(100):
-        if is_running():
-            return
-        time.sleep(0.05)
-    raise SystemExit(f"Hexmux supervisor failed to start at {socket_path()}")
 
 
 def print_instances(instances: list[dict[str, Any]]) -> None:

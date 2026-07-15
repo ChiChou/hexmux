@@ -1,0 +1,10 @@
+[Unit]
+Description=Hexmux activation socket
+
+[Socket]
+ListenStream=%t/hexmux/default
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target

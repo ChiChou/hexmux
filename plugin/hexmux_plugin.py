@@ -11,10 +11,8 @@ import ast
 import io
 import json
 import os
-import shutil
 import socket
 import struct
-import subprocess
 import sys
 import threading
 import time
@@ -39,41 +37,9 @@ def socket_path() -> Path:
         return Path(override).expanduser()
     if sys.platform == "darwin":
         return Path("/private/tmp") / f"hexmux-{os.getuid()}" / "default"
+    if sys.platform.startswith("linux"):
+        return Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "hexmux" / "default"
     return Path("/tmp") / f"hexmux-{os.getuid()}" / "default"
-
-
-def find_hexmux_executable() -> str | None:
-    override = os.environ.get("HEXMUX_EXECUTABLE")
-    if override:
-        return str(Path(override).expanduser())
-    discovered = shutil.which("hexmux")
-    if discovered:
-        return discovered
-    candidates = (
-        Path.home() / ".local" / "bin" / "hexmux",
-        Path("/opt/homebrew/bin/hexmux"),
-        Path("/usr/local/bin/hexmux"),
-    )
-    return next((str(path) for path in candidates if path.is_file() and os.access(path, os.X_OK)), None)
-
-
-def ensure_supervisor_running() -> str:
-    """Ask the CLI to start its daemon before connecting."""
-    executable = find_hexmux_executable()
-    if executable is None:
-        return "executable-not-found"
-    try:
-        completed = subprocess.run(
-            [executable, "status"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"start-failed: {exc}"
-    return "running" if completed.returncode == 0 else f"start-failed: exit {completed.returncode}"
 
 
 def send(sock: socket.socket, message: object) -> None:
@@ -194,8 +160,6 @@ class HexmuxPlugin(idaapi.plugin_t):
     wanted_hotkey = ""
 
     def init(self):
-        supervisor_status = ensure_supervisor_running()
-        print(f"[Hexmux] Supervisor: {supervisor_status}")
         self.connector = Connector()
         self.connector.start()
         return idaapi.PLUGIN_KEEP

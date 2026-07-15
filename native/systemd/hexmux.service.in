@@ -1,0 +1,7 @@
+[Unit]
+Description=Hexmux supervisor
+Requires=hexmux.socket
+
+[Service]
+Type=exec
+ExecStart=@HEXMUX_ACTIVATE@ -- @PYTHON@ -m hexmux.supervisor --idle-timeout 30

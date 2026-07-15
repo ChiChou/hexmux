@@ -15,11 +15,17 @@ class PathsTest(unittest.TestCase):
             self.assertEqual(runtime_dir(), expected)
             self.assertEqual(socket_path(), expected / "default")
 
-    def test_other_unix_default_follows_tmux_layout(self):
+    def test_linux_default_matches_systemd_runtime_directory(self):
         with mock.patch.dict(os.environ, {}, clear=True), mock.patch("hexmux.paths.sys.platform", "linux"):
-            expected = Path("/tmp") / f"hexmux-{os.getuid()}"
+            expected = Path("/run/user") / str(os.getuid()) / "hexmux"
             self.assertEqual(runtime_dir(), expected)
             self.assertEqual(socket_path(), expected / "default")
+
+    def test_linux_honors_xdg_runtime_directory(self):
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/runtime/me"}, clear=True), mock.patch(
+            "hexmux.paths.sys.platform", "linux"
+        ):
+            self.assertEqual(runtime_dir(), Path("/runtime/me/hexmux"))
 
     def test_explicit_socket_override_is_preserved(self):
         with mock.patch.dict(os.environ, {"HEXMUX_SOCKET": "~/custom.sock"}, clear=True):
